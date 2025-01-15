@@ -956,6 +956,10 @@ impl Loader {
         })
     }
 
+    pub fn language_configs_for_work_dir(&self) -> Vec<Arc<LanguageConfiguration>> {
+        todo!();
+    }
+
     pub fn language_config_for_file_name(&self, path: &Path) -> Option<Arc<LanguageConfiguration>> {
         // Find all the language configurations that match this file name
         // or a suffix of the file name.

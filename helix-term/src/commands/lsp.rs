@@ -427,11 +427,17 @@ pub fn workspace_symbol_picker(cx: &mut Context) {
     use crate::ui::picker::Injector;
 
     let doc = doc!(cx.editor);
-    if doc
+    let mut language_servers: Vec<_> = doc
         .language_servers_with_feature(LanguageServerFeature::WorkspaceSymbols)
-        .count()
-        == 0
-    {
+        .collect();
+
+    // If we could not find any language servers for our current file, try to fall back to the workspace first.
+    if language_servers.len() == 0 {
+        let loader = cx.editor.syn_loader.load();
+        let workspace_languages = loader.language_configs_for_work_dir();
+    }
+
+    if language_servers.len() == 0 {
         cx.editor
             .set_error("No configured language server supports workspace symbols");
         return;
