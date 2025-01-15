@@ -2,22 +2,32 @@ use anyhow::{Context, Error, Result};
 use crossterm::event::EventStream;
 use helix_loader::VERSION_AND_GIT_HASH;
 use helix_term::application::Application;
-use helix_term::args::Args;
+use helix_term::args::{Args, Verbosity};
 use helix_term::config::{Config, ConfigLoadError};
 
-fn setup_logging(verbosity: u64) -> Result<()> {
-    let mut base_config = fern::Dispatch::new();
+fn setup_logging(verbosity: &Verbosity) -> Result<()> {
+    let mut builder = env_filter::Builder::new();
 
-    base_config = match verbosity {
-        0 => base_config.level(log::LevelFilter::Warn),
-        1 => base_config.level(log::LevelFilter::Info),
-        2 => base_config.level(log::LevelFilter::Debug),
-        _3_or_more => base_config.level(log::LevelFilter::Trace),
+    match verbosity {
+        Verbosity::Numeric(n) => match n {
+            0 => builder.filter_level(log::LevelFilter::Warn),
+            1 => builder.filter_level(log::LevelFilter::Info),
+            2 => builder.filter_level(log::LevelFilter::Debug),
+            _3_or_more => builder.filter_level(log::LevelFilter::Trace),
+        },
+        Verbosity::Directives(directives) => {
+            builder.parse(directives)
+        },
     };
 
-    // Separate file config so we can include year, month and day in file logs
+    let filter = builder.build();
+    
+    // File config so we can include year, month and day in file logs
     let file_config = fern::Dispatch::new()
-        .format(|out, message, record| {
+        .format(move |out, message, record| {
+            if !filter.matches(record) {
+                return;
+            }
             out.finish(format_args!(
                 "{} {} [{}] {}",
                 chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%.3f"),
@@ -28,7 +38,7 @@ fn setup_logging(verbosity: u64) -> Result<()> {
         })
         .chain(fern::log_file(helix_loader::log_file())?);
 
-    base_config.chain(file_config).apply()?;
+    file_config.apply()?;
 
     Ok(())
 }
@@ -112,7 +122,7 @@ FLAGS:
         return Ok(0);
     }
 
-    setup_logging(args.verbosity).context("failed to initialize logging")?;
+    setup_logging(&args.verbosity).context("failed to initialize logging")?;
 
     // Before setting the working directory, resolve all the paths in args.files
     for (path, _) in &mut args.files {

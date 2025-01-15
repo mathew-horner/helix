@@ -13,7 +13,7 @@ pub struct Args {
     pub fetch_grammars: bool,
     pub build_grammars: bool,
     pub split: Option<Layout>,
-    pub verbosity: u64,
+    pub verbosity: Verbosity,
     pub log_file: Option<PathBuf>,
     pub config_file: Option<PathBuf>,
     pub files: Vec<(PathBuf, Position)>,
@@ -25,6 +25,7 @@ impl Args {
         let mut args = Args::default();
         let mut argv = std::env::args().peekable();
         let mut line_number = 0;
+        let mut verbosity: Option<Verbosity> = None;
 
         argv.next(); // skip the program, we don't care about that
 
@@ -82,7 +83,24 @@ impl Args {
                     let arg = arg.get(1..).unwrap().chars();
                     for chr in arg {
                         match chr {
-                            'v' => args.verbosity += 1,
+                            // PICKUP: We need to use a different flag for the directives, unparseable otherwise (due to filenames being inferred as directives).
+                            'v' => {
+                                let value = argv
+                                    .peek()
+                                    .and_then(|arg| (!arg.starts_with('-')).then_some(arg));
+
+                                println!("{value:?}");
+
+                                match (verbosity.as_mut(), value) {
+                                    (Some(Verbosity::Numeric(n)), None) => *n += 1,
+                                    (None, None) => verbosity = Some(Verbosity::Numeric(0)),
+                                    (None, Some(directives)) => {
+                                        verbosity =
+                                            Some(Verbosity::Directives(directives.to_owned()))
+                                    },
+                                    _ => anyhow::bail!("you must provide either one set of directives for -v or use the flag one or more times in its unary form, but not both"),
+                                }
+                            }
                             'V' => args.display_version = true,
                             'h' => args.display_help = true,
                             _ => anyhow::bail!("unexpected short arg {}", chr),
@@ -110,7 +128,22 @@ impl Args {
             }
         }
 
+        if let Some(verbosity) = verbosity {
+            args.verbosity = verbosity;
+        }
+
         Ok(args)
+    }
+}
+
+pub enum Verbosity {
+    Numeric(u64),
+    Directives(String),
+}
+
+impl Default for Verbosity {
+    fn default() -> Self {
+        Self::Numeric(0)
     }
 }
 
